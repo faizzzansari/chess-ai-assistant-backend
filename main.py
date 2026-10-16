@@ -4,11 +4,9 @@ from typing import Optional
 import chess
 import chess.engine
 from fastapi import FastAPI, HTTPException
-from matplotlib import image
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import UploadFile, File, Form
-from recognition import image_to_fen
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 ENGINE_PATH = os.getenv("STOCKFISH_PATH", "stockfish")
@@ -142,6 +140,21 @@ async def analyze_image(
 
         if not data or len(data) > 12 * 1024 * 1024:
             raise ValueError("Image is empty or exceeds the 12 MB limit.")
+
+        # Load image recognition only when /analyze-image is called.
+        # This keeps the YOLO/PyTorch model out of normal API startup and
+        # out of memory during regular /analyze Stockfish requests.
+        try:
+            from recognition import image_to_fen
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Image recognition is unavailable in this deployment. "
+                    "Use /analyze with a FEN position. "
+                    f"Recognition import failed: {exc}"
+                ),
+            )
 
         detected = image_to_fen(data, turn=turn)
 
